@@ -1,0 +1,239 @@
+---
+title: "467 Project"
+author: "Yash Sihag, Shoaib Ansari, Evan Shields"
+date: "2023-10-26"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(bestglm)
+```
+
+Some summary statistics
+```{r}
+fastFood <- read.csv("FastFood.csv")
+
+colnames(fastFood) <- c("Chain Name", "Systemwide Sales", "Sales per Unit", "Franchised Stores", "Company Stores", "2021 Total Units", "Change in TU from 2020")
+
+# Increase of 1485 units of these top 50 chains from 2020 to 2021 
+# Median increase of 24 units per chain
+# 5-num-sum: -1043, -6, 24, 102, 246
+sum(fastFood$`Change in TU from 2020`)
+median(fastFood$`Change in TU from 2020`)
+fivenum(fastFood$`Change in TU from 2020`)
+
+# 158370 total units across all top 50 restaurants
+# Median amount of units is 1634
+# 5-num-sum: 243, 773, 1634, 3552, 21147
+sum(fastFood$`2021 Total Units`)
+median(fastFood$`2021 Total Units`)
+fivenum(fastFood$`2021 Total Units`)
+
+# $248,253,000,000 total system wide sales across all top 50 restaurants
+# Median amount of total system wide sales is $2,289,500,000
+# 5-num-sum (in millions $): 615, 931, 2289.5, 5500, 45960
+sum(fastFood$`Systemwide Sales`)
+median(fastFood$`Systemwide Sales`)
+fivenum(fastFood$`Systemwide Sales`)
+```
+
+Restaurant vs. SPU bar chart
+```{r}
+fastFood$`Chain Name` <- substr(fastFood$`Chain Name`, 1, 17)
+
+ggplot(fastFood, aes(x = reorder(`Chain Name`, -`Sales per Unit`), y = `Sales per Unit`, fill = `Sales per Unit`)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1), plot.title =   element_text(hjust = 0.5)) +
+  labs(x = "Restaurant Chain", y = "Sales per Unit (Thousands of $)") +
+  ggtitle("Top 50 Fast Food Chains Sales per Unit")
+```
+
+Boxplots of predictors and response
+```{r}
+# Boxplot for Systemwide Sales
+ggplot(fastFood, aes(y = `Systemwide Sales`)) +
+  geom_boxplot(width = 0.25) +
+  labs(title = "Systemwide Sales Boxplot", y = "Systemwide Sales (Millions of $)") + 
+  theme(plot.margin = margin(0, 6, 0, 6, "cm"), plot.title = element_text(hjust = 0.5))
+
+# Boxplot for Sales per Unit
+ggplot(fastFood, aes(y = `2021 Total Units`)) +
+  geom_boxplot() +
+  labs(title = "2021 Total Units Boxplot") + 
+  theme(plot.margin = margin(0, 6, 0, 6, "cm"), plot.title = element_text(hjust = 0.5))
+
+# Boxplot for Change in TU from 2020
+ggplot(fastFood, aes(y = (`Change in TU from 2020`))) +
+  geom_boxplot() +
+  labs(title = "Change in Total Units from 2020 Boxplot", y = "Change in Total Units from 2020") + 
+  theme(plot.margin = margin(0, 6, 0, 6, "cm"), plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# Full model
+full_model <- lm(fastFood$`Systemwide Sales` ~ fastFood$`Sales per Unit` + fastFood$`Franchised Stores`+ fastFood$`Company Stores` + fastFood$`2021 Total Units` + fastFood$`Change in TU from 2020`)
+
+summary(full_model)
+```
+The regression model output shows a quantitative and categorical predictor and their association with the dependent variable, Systemwide Sales. The coefficient for the quantitative predictor Sales per Unit is 1.9503, indicating a positive link with Systemwide Sales. All else being equal, Systemwide Sales grow by 1.9503 for each unit increase in Sales per Unit. A p-value of 2.81e-05, far below 0.05, shows that this link is statistically significant. The t-value of 4.674 suggests the coefficient is significant and distinct from zero.
+
+Moving on to the predictor Company retailers, which indicates the number of company-owned retailers, things change. The Company Stores coefficient is -748.3852. If we use Company shops as a binary variable (1 for company shops, 0 otherwise), this coefficient shows that company stores lower Systemwide Sales by 748.3852 units on average. The enormous standard error of 1114.7567 compared to the coefficient and the t-value of -0.671 imply that this finding is not statistically significant, since the p-value is 0.506, much beyond the 0.05 threshold. Thus, corporate stores may not affect Systemwide Sales, and we would not reject the null hypothesis that sales are the same regardless of their presence.
+
+In this model, Sales per Unit predicts Systemwide Sales, while Company Stores does not. These findings must be considered alongside the model's other diagnostics to completely assess the predictors' effects.
+
+```{r}
+plot(fastFood$`Sales per Unit`, residuals(full_model), xlab = "Sales Per Unit", ylab = "Residuals", main = "Residual Plot")
+
+residuals <- residuals(full_model)
+qqnorm(residuals, main = "QQ Plot")
+qqline(residuals, col = "red")
+```
+The Residual Plot shows residuals on the vertical axis and Sales Per Unit on the horizontal. This figure helps identify outliers, non-linearity, and uneven error variances. In an ideal figure, the residuals are randomly distributed about the horizontal axis (which would be 0 if presented), showing that the model's predictions are correct for all independent variable values.
+According to the Residual Plot, the residuals do not create a recognizable pattern, which shows no non-linearity in the predictor-outcome connection. However, the 'fan' shape (widening variance as Sales Per Unit grows) may imply heteroscedasticity, when error variance is not constant across all independent variable levels. Some aspects stand out, especially with larger Sales Per Unit levels. These outliers may affect the regression model.
+
+QQ Plots assess if a dataset has a normal distribution. It compares sample data quantiles to theoretical distribution quantiles. The assumption that residuals are normally distributed is commonly tested in regression diagnostics.
+If points are close to the red line in the QQ Plot, residuals are regularly distributed. The figure indicates that the points follow the line but diverge significantly in the tails, especially near the top. This suggests that the residuals may have a heavy-tailed distribution, which deviates from normality but not significantly for real-world data.
+
+Assumption Checks:
+
+Linearity: The Residual Plot does not show a clear pattern, which suggests linearity is reasonably met.
+Homoscedasticity: The 'fan' shape in the Residual Plot suggests heteroscedasticity is a concern.
+Normality of Residuals: The QQ Plot shows minor deviations from normality, especially in the tails.
+
+Given these observations, while the assumption of linearity seems to be met, the assumptions of homoscedasticity and normality are somewhat violated. The slight non-normality is not uncommon, but if the sample size is large enough, the Central Limit Theorem assures us that the regression estimates will still be valid, albeit with potentially less efficient estimates. 
+
+
+Hypothesis Testing for Sales per Unit Coefficient
+
+Null Hypothesis (H0)
+The null hypothesis states that the Sales per Unit coefficient (beta_1) is equal to zero, which means that Sales per Unit has no effect on Systemwide Sales.
+
+H0: beta_1 is 0
+
+Alternative Hypothesis (H1)
+The alternative hypothesis states that the Sales per Unit coefficient (beta_1) is not equal to zero, which means that Sales per Unit does have an effect on Systemwide Sales.
+
+H1: beta_1 is not 0
+
+
+Test Statistic
+The test statistic is the t-value that is calculated by taking the estimated coefficient and dividing it by its standard error. This is done to assess how many standard errors the coefficient is away from zero.
+
+Test statistic (t) = Estimate / Std. Error = 1.9503 / 0.4173 = 4.674
+
+Degrees of Freedom
+The degrees of freedom for the t-test in a regression model is the number of observations minus the number of estimated parameters. In this case, it looks like there are 50 observations (44 degrees of freedom plus 5 estimated parameters plus 1 for the intercept).
+
+df = n - (k + 1) = 50 - (5 + 1) = 44
+
+P-value
+The p-value is a measure of the probability of observing a test statistic as extreme as, or more extreme than, the one observed if the null hypothesis is true. In this output, the p-value for the Sales per Unit coefficient is given as 2.81e-05.
+
+p-value = 2.81e-05
+
+Conclusion
+Given the p-value is much smaller than the significance level 0.05, we reject the null hypothesis. This means that there is statistically significant evidence at the 0.05 level to suggest that the Sales per Unit does have an effect on Systemwide Sales.
+
+The Sales per Unit has a positive relationship with Systemwide Sales, as indicated by the positive coefficient (1.9503), and this relationship is statistically significant. Therefore, it can be concluded that as Sales per Unit increases, Systemwide Sales are also expected to increase, holding all other variables constant.
+
+```{r}
+reduced_model <- lm(fastFood$`Systemwide Sales`~ fastFood$`Sales per Unit` + fastFood$`Change in TU from 2020`)
+summary(reduced_model)
+anova(reduced_model, full_model)
+AIC(full_model, reduced_model)
+BIC(full_model, reduced_model)
+```
+The model's performance has deteriorated significantly, as seen by lower Multiple R-squared and Adjusted R-squared values compared to the entire model. The model is not statistically significant at the 0.05 level, since the F-statistic p-value has risen.This may imply that the eliminated variables were not significant but still contributed to the model, resulting in a worse fit.
+
+Given this result, it's clear that even though some predictors were not individually significant, they contribute to the model when included with other variables. This could be due to multicollinearity, where the individual effect of one predictor is not significant, but its combined effect with other variables is.
+
+Both the AIC and BIC are lower for the full model compared to the reduced model. This suggests that despite the inclusion of more parameters, the full model provides a better balance between goodness of fit and complexity. The reduced model, while simpler with fewer parameters, does not fit the data as well according to these criteria.
+
+
+```{r}
+anova(reduced_model, full_model)
+```
+
+The F-test shows that the full model is significantly better than the reduced model (p < 0.001). 
+
+Null hypothesis (H0): The reduced model fits the data as well as the full model.
+
+Alternative hypothesis (H1): The full model fits the data better than the reduced model.
+
+F-statistic = 65.663
+
+Degrees of freedom:
+
+Numerator (full model df): 3
+
+Denominator (reduced model df): 44
+
+P-value = 2.762e-16
+
+Since the p-value is < 0.05, we reject the null hypothesis and conclude that the full model provides a significantly better fit than the reduced model. Adding the Franchised Stores and Company Stores variables improves model fit despite the individual variables not being significant. This suggests that together these variables explain additional variation in Systemwide Sales.
+
+```{r}
+# 95% CI for new observations in full model 
+predict(full_model, interval="confidence")
+
+# 95% CI for new observations in reduced model
+predict(reduced_model, interval="confidence")
+```
+
+Part 3 - Confidence Intervals
+
+95% confidence interval for new observations using full model:
+(1.75e+03, 1.12e+04)
+
+95% confidence interval for new observations using reduced model:
+(-1.20e+04, 1.20e+04)
+
+The confidence interval for the full model ranges from 1,750 to 11,200 (in millions $). This indicates that for a new observation, we can be 95% confident the true Systemwide Sales value lies within this range.
+
+The reduced model's confidence interval ranges from -12,000 to 12,000 (in millions $). This is much wider than the full model's interval. The reduced model cannot precisely estimate Systemwide_Sales for new data points after excluding the Franchised Stores and Company Stores variables.
+
+In context, the full model provides a reasonable precision for estimating Systemwide Sales for new fast food chains, while the reduced model's estimates are too imprecise to be useful. This aligns with the F-test results that showed the full model is superior.
+
+Part 4 - Wanted to do ridge regression, but we couldn't get the genridge library to install properly
+We used AIC and BIC forward model selection instead
+```{r}
+Xy <- fastFood
+Xy <- Xy[-1]
+colnames(Xy)[1] = "y"
+Xy <- Xy %>% relocate(y, .after='Change in TU from 2020')
+Xy <- Xy[-29,] # Row 29 (McDonald's is the outlier), so it will be removed
+fastFood <- fastFood[-29,]
+
+aic <- bestglm(Xy, IC="AIC")
+aic$Subsets
+
+bic <- bestglm(Xy, IC="BIC")
+bic$Subsets
+
+# Using AIC and BIC model selection, they both agree that the following model is best
+bestModel <- lm(fastFood$`Systemwide Sales` ~ fastFood$`Sales per Unit` + fastFood$`2021 Total Units` + fastFood$`Change in TU from 2020`)
+
+summary(bestModel)
+```
+
+In this model, all of the predictors are significant, and the extremely large standard errors for certain predictors are gone, indicating that the issues with multicollinearity are taken care of. This better model also has an R-squared value of .8754 compared to the original model at .8293, indicating that this latest model is a better fit.  
+
+Diagnostics for bestModel
+
+After removing the outlier and the predictors company stores and franchise stores, the qqplot has a lot less significant short-tail error, which is good. In addition, with the removal of the outlier, it is easier to see what is going on in the residual plot. While the scatter doesn't appear to be completely random, there also does not appear to be a distinct shape to the scatter either.
+```{r}
+plot(fitted(bestModel), residuals(bestModel), xlab = "Fitted Values", ylab = "Residuals", main = "Residual Plot")
+abline(h=0, col = "blue")
+
+residuals <- residuals(bestModel)
+qqnorm(residuals, main = "QQ Plot")
+qqline(residuals, col = "blue")
+```
+
